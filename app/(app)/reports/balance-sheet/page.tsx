@@ -28,6 +28,7 @@ export default async function BalanceSheetPage() {
         </Group>
         <Group title="Liabilities">
           <Row label="Accounts Payable" value={fmt(bs.accountsPayable)} />
+          <Row label="Tax Payable" value={fmt(bs.taxPayable)} />
           <Row label="Loans" value={fmt(bs.loans)} />
           <Row label="Total Liabilities" value={fmt(bs.totalLiabilities)} bold />
         </Group>
@@ -41,6 +42,7 @@ export default async function BalanceSheetPage() {
       </div>
       <p className="max-w-2xl text-xs text-muted">
         Cash = payments received − expenses paid. Accounts receivable = unpaid invoice balances. Inventory valued at cost.
+        Tax payable = tax collected on all issued invoices, owed to the tax office until remitted (no remittances have been recorded yet).
         Accounts payable and loans can be tracked when needed — kept at zero for simplicity.
       </p>
     </div>
