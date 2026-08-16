@@ -134,6 +134,7 @@ export interface BalanceSheet {
   inventoryValue: number;
   totalAssets: number;
   accountsPayable: number;
+  taxPayable: number;
   loans: number;
   totalLiabilities: number;
   equity: number;
@@ -144,7 +145,7 @@ export async function computeBalanceSheet(): Promise<BalanceSheet> {
   const [{ data: payments }, { data: expenses }, { data: invoices }, { data: inventory }] = await Promise.all([
     supabase.from("payments").select("amount"),
     supabase.from("expenses").select("amount"),
-    supabase.from("invoices").select("balance_due, status").in("status", ["sent", "partial", "overdue"]),
+    supabase.from("invoices").select("balance_due, tax_amount, status").in("status", ["sent", "partial", "overdue", "paid"]),
     supabase.from("inventory").select("quantity, cost_price").eq("is_active", true),
   ]);
 
@@ -155,11 +156,13 @@ export async function computeBalanceSheet(): Promise<BalanceSheet> {
   const inventoryValue = (inventory ?? []).reduce((s, i) => s + Number(i.quantity) * Number(i.cost_price), 0);
   const totalAssets = cash + accountsReceivable + inventoryValue;
   const accountsPayable = 0;
+  // Tax collected on issued (non-draft, non-cancelled) invoices, owed to the tax office until remitted.
+  const taxPayable = (invoices ?? []).reduce((s, i) => s + Number(i.tax_amount), 0);
   const loans = 0;
-  const totalLiabilities = accountsPayable + loans;
+  const totalLiabilities = accountsPayable + taxPayable + loans;
   return {
     cash, accountsReceivable, inventoryValue, totalAssets,
-    accountsPayable, loans, totalLiabilities,
+    accountsPayable, taxPayable, loans, totalLiabilities,
     equity: totalAssets - totalLiabilities,
   };
 }
