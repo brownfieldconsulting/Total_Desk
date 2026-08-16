@@ -17,6 +17,7 @@ const badgeColors: Record<string, string> = {
   partial: "bg-amber-100 text-amber-800",
   overdue: "bg-red-100 text-red-700",
   low: "bg-red-100 text-red-700",
+  cancelled: "bg-red-50 text-red-600 line-through decoration-red-300",
 };
 
 export function Badge({ tone, children }: { tone: string; children: ReactNode }) {
