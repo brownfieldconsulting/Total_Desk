@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Printer, Download, Mail, DollarSign, Send, Trash2 } from "lucide-react";
-import { recordPayment, deletePayment, setInvoiceStatus } from "@/lib/actions/invoices";
+import { Printer, Download, Mail, DollarSign, Send, Trash2, Ban } from "lucide-react";
+import { recordPayment, deletePayment, setInvoiceStatus, cancelInvoice } from "@/lib/actions/invoices";
 import { formatDate, formatMoney, INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/format";
 import { Badge, Modal, SubmitButton, useToast } from "@/components/ui";
 
@@ -15,6 +15,7 @@ export function InvoiceDetail({
   invoice: {
     id: string; invoice_number: string; status: string; invoice_date: string; due_date: string | null;
     subtotal: number; tax_rate: number; tax_amount: number; grand_total: number; amount_paid: number; balance_due: number;
+    cancellation_reason?: string | null; cancelled_at?: string | null;
   };
   items: Item[];
   payments: Payment[];
@@ -25,10 +26,22 @@ export function InvoiceDetail({
 }) {
   const toast = useToast();
   const [payOpen, setPayOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState<string>();
   const [emailing, setEmailing] = useState(false);
   const [error, setError] = useState<string>();
   const fmt = (n: number | string) => formatMoney(Number(n), settings.currency);
-  const canEdit = role !== "accountant";
+  const isCancelled = invoice.status === "cancelled";
+  const canEdit = role !== "accountant" && !isCancelled;
+
+  async function confirmCancel() {
+    const res = await cancelInvoice(invoice.id, cancelReason);
+    if (!res.ok) { setCancelError(res.error); return; }
+    setCancelError(undefined);
+    setCancelOpen(false);
+    toast("Invoice cancelled");
+  }
   const labourItems = items.filter((i) => i.item_type === "labour");
   const partItems = items.filter((i) => i.item_type !== "labour");
 
@@ -57,6 +70,13 @@ export function InvoiceDetail({
 
   return (
     <div className="space-y-5">
+      {isCancelled && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span className="font-bold">Cancelled</span>
+          {invoice.cancelled_at ? ` on ${formatDate(invoice.cancelled_at)}` : ""}
+          {invoice.cancellation_reason ? ` — ${invoice.cancellation_reason}` : ""}
+        </div>
+      )}
       {/* Paper */}
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-4 bg-gradient-to-br from-navy-700 to-navy-900 px-6 py-6 text-white">
@@ -180,6 +200,14 @@ export function InvoiceDetail({
             <Send size={15} /> Mark Sent
           </button>
         )}
+        {role === "owner" && !isCancelled && (
+          <button
+            onClick={() => { setCancelReason(""); setCancelError(undefined); setCancelOpen(true); }}
+            className="btn-ghost text-red-600 hover:bg-red-50"
+          >
+            <Ban size={15} /> Cancel Invoice
+          </button>
+        )}
       </div>
 
       {/* Payments */}
@@ -251,6 +279,32 @@ export function InvoiceDetail({
           </div>
           <SubmitButton>Record Payment</SubmitButton>
         </form>
+      </Modal>
+
+      <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title="Cancel Invoice">
+        <div className="space-y-4">
+          {cancelError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{cancelError}</p>}
+          <p className="text-sm text-muted">
+            This marks <strong>{invoice.invoice_number}</strong> as cancelled. This cannot be undone from here.
+          </p>
+          <div>
+            <label className="label">Reason / Comment *</label>
+            <textarea
+              rows={3}
+              required
+              className="input"
+              placeholder="Why is this invoice being cancelled?"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setCancelOpen(false)} className="btn-ghost">Back</button>
+            <button type="button" onClick={confirmCancel} className="btn-primary bg-red-600 hover:bg-red-700">
+              Confirm Cancel
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
