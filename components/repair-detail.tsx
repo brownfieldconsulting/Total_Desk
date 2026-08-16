@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Trash2, Ban } from "lucide-react";
 import {
-  setRepairStatus, updateRepairOrder, addLabourLine, removeLabourLine, addPartLine, removePartLine,
+  setRepairStatus, updateRepairOrder, addLabourLine, removeLabourLine, addPartLine, removePartLine, cancelRepairOrder,
 } from "@/lib/actions/repairs";
 import { createInvoiceFromRepair } from "@/lib/actions/invoices";
-import { formatMoney, REPAIR_STATUS_LABELS } from "@/lib/format";
+import { formatDate, formatMoney, REPAIR_STATUS_LABELS } from "@/lib/format";
 import { Modal, SubmitButton, useToast } from "@/components/ui";
 
 interface Labour { id: string; description: string; hours: number; hourly_rate: number; total: number }
@@ -23,6 +23,7 @@ export function RepairDetail({
   repair: {
     id: string; ro_number: number; status: string;
     customer_concern: string | null; diagnosis: string | null; repairs_performed: string | null; mechanic_notes: string | null;
+    cancellation_reason?: string | null; cancelled_at?: string | null;
   };
   labour: Labour[];
   parts: Part[];
@@ -37,9 +38,22 @@ export function RepairDetail({
   const toast = useToast();
   const [labourOpen, setLabourOpen] = useState(false);
   const [partOpen, setPartOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState<string>();
   const [error, setError] = useState<string>();
-  const canEdit = role !== "accountant" && repair.status !== "invoiced";
+  const isCancelled = repair.status === "cancelled";
+  const canEdit = role !== "accountant" && repair.status !== "invoiced" && !isCancelled;
   const isOwner = role === "owner";
+  const canCancel = role !== "accountant" && repair.status !== "invoiced" && !isCancelled;
+
+  async function confirmCancel() {
+    const res = await cancelRepairOrder(repair.id, cancelReason);
+    if (!res.ok) { setCancelError(res.error); return; }
+    setCancelError(undefined);
+    setCancelOpen(false);
+    toast("Repair order cancelled");
+  }
 
   const totals = useMemo(() => {
     const labourRev = labour.reduce((s, l) => s + Number(l.total), 0);
@@ -70,11 +84,30 @@ export function RepairDetail({
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
       <div className="space-y-5">
+        {isCancelled && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="font-bold">Cancelled</span>
+            {repair.cancelled_at ? ` on ${formatDate(repair.cancelled_at)}` : ""}
+            {repair.cancellation_reason ? ` — ${repair.cancellation_reason}` : ""}
+          </div>
+        )}
         {/* Status */}
         <div className="card p-4">
-          <div className="sec-label mb-2.5">Status</div>
+          <div className="mb-2.5 flex items-center justify-between">
+            <div className="sec-label">Status</div>
+            {canCancel && (
+              <button
+                onClick={() => { setCancelReason(""); setCancelError(undefined); setCancelOpen(true); }}
+                className="flex items-center gap-1.5 text-sm font-bold text-red-600 hover:text-red-700"
+              >
+                <Ban size={14} /> Cancel Repair Order
+              </button>
+            )}
+          </div>
           <div className="flex flex-wrap gap-2">
-            {Object.entries(REPAIR_STATUS_LABELS).map(([key, lbl]) => (
+            {Object.entries(REPAIR_STATUS_LABELS)
+              .filter(([key]) => key !== "cancelled" || repair.status === "cancelled")
+              .map(([key, lbl]) => (
               <button
                 key={key}
                 disabled={!canEdit && key !== repair.status}
@@ -250,6 +283,32 @@ export function RepairDetail({
             toast("Part added");
           }}
         />
+      </Modal>
+
+      <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title="Cancel Repair Order">
+        <div className="space-y-4">
+          {cancelError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{cancelError}</p>}
+          <p className="text-sm text-muted">
+            This marks <strong>RO #{repair.ro_number}</strong> as cancelled. This cannot be undone from here.
+          </p>
+          <div>
+            <label className="label">Reason / Comment *</label>
+            <textarea
+              rows={3}
+              required
+              className="input"
+              placeholder="Why is this repair order being cancelled?"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setCancelOpen(false)} className="btn-ghost">Back</button>
+            <button type="button" onClick={confirmCancel} className="btn-primary bg-red-600 hover:bg-red-700">
+              Confirm Cancel
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
