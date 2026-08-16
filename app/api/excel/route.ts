@@ -74,6 +74,7 @@ export async function GET(request: Request) {
     ws.addRow([]);
     styleHeader(ws.addRow(["Liabilities", ""]));
     ws.addRow(["Accounts Payable", bs.accountsPayable]);
+    ws.addRow(["Tax Payable", bs.taxPayable]);
     ws.addRow(["Loans", bs.loans]);
     ws.addRow(["Total Liabilities", bs.totalLiabilities]).font = { bold: true };
     ws.addRow([]);
