@@ -33,6 +33,7 @@ export const REPAIR_STATUS_LABELS: Record<string, string> = {
   in_progress: "In Progress",
   completed: "Completed",
   invoiced: "Invoiced",
+  cancelled: "Cancelled",
 };
 
 export const INVOICE_STATUS_LABELS: Record<string, string> = {
@@ -41,6 +42,7 @@ export const INVOICE_STATUS_LABELS: Record<string, string> = {
   paid: "Paid",
   partial: "Partial Payment",
   overdue: "Overdue",
+  cancelled: "Cancelled",
 };
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
