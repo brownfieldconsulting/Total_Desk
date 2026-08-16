@@ -128,3 +128,27 @@ export async function removePartLine(id: string, repairOrderId: string) {
   await supabase.from("repair_order_parts").delete().eq("id", id);
   revalidatePath(`/repairs/${repairOrderId}`);
 }
+
+export async function cancelRepairOrder(id: string, reason: string): Promise<{ ok: boolean; error?: string }> {
+  const profile = await requireRole("owner", "employee");
+  const trimmed = reason.trim();
+  if (!trimmed) return { ok: false, error: "A cancellation comment is required" };
+  const supabase = await createClient();
+  const { data: repair } = await supabase.from("repair_orders").select("status").eq("id", id).single();
+  if (!repair) return { ok: false, error: "Repair order not found" };
+  if (repair.status === "cancelled") return { ok: false, error: "Already cancelled" };
+  if (repair.status === "invoiced") return { ok: false, error: "Cannot cancel a repair order that has already been invoiced — cancel the invoice instead" };
+  const { error } = await supabase
+    .from("repair_orders")
+    .update({
+      status: "cancelled",
+      cancellation_reason: trimmed,
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: profile.id,
+    })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/repairs/${id}`);
+  revalidatePath("/repairs");
+  return { ok: true };
+}
