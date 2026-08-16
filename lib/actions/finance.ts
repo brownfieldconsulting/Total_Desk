@@ -79,16 +79,22 @@ export async function deleteExpense(id: string) {
   revalidatePath("/expenses");
 }
 
-export async function addCategory(kind: "income" | "expense", name: string): Promise<{ ok: boolean; error?: string }> {
+export async function addCategory(kind: "income" | "expense", name: string): Promise<{ ok: boolean; error?: string; id?: string }> {
   await requireRole("owner");
-  if (!name.trim()) return { ok: false, error: "Name required" };
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, error: "Name required" };
   const supabase = await createClient();
   const table = kind === "income" ? "income_categories" : "expense_categories";
-  const { error } = await supabase.from(table).insert({ name: name.trim() });
+
+  // Reuse an existing category with the same name (case-insensitive) instead of duplicating
+  const { data: existing } = await supabase.from(table).select("id").ilike("name", trimmed).maybeSingle();
+  if (existing) return { ok: true, id: existing.id };
+
+  const { data, error } = await supabase.from(table).insert({ name: trimmed }).select("id").single();
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/${kind === "income" ? "income" : "expenses"}`);
   revalidatePath("/settings");
-  return { ok: true };
+  return { ok: true, id: data.id };
 }
 
 export async function getReceiptUrl(expenseId: string): Promise<{ ok: boolean; url?: string; error?: string }> {
