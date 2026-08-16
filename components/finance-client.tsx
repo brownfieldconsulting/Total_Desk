@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Trash2, Paperclip } from "lucide-react";
-import { addIncome, deleteIncome, addExpense, deleteExpense, getReceiptUrl } from "@/lib/actions/finance";
+import { addIncome, deleteIncome, addExpense, deleteExpense, getReceiptUrl, addCategory } from "@/lib/actions/finance";
 import { formatDate, formatMoney } from "@/lib/format";
 import { Modal, SubmitButton, useToast } from "@/components/ui";
 
@@ -30,9 +30,26 @@ export function FinanceClient({
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string>();
+  const [cats, setCats] = useState<Category[]>(categories);
+  const [categoryId, setCategoryId] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [catError, setCatError] = useState<string>();
   const fmt = (n: number | string) => formatMoney(Number(n), currency);
   const isOwner = role === "owner";
   const title = kind === "income" ? "Income" : "Expenses";
+
+  async function saveNewCategory() {
+    const name = newCategoryName.trim();
+    if (!name) { setCatError("Enter a category name"); return; }
+    const res = await addCategory(kind, name);
+    if (!res.ok || !res.id) { setCatError(res.error ?? "Could not add category"); return; }
+    setCats((prev) => (prev.some((c) => c.id === res.id) ? prev : [...prev, { id: res.id!, name }]));
+    setCategoryId(res.id);
+    setNewCategoryName("");
+    setAddingCategory(false);
+    setCatError(undefined);
+  }
 
   async function openReceipt(id: string) {
     const res = await getReceiptUrl(id);
@@ -48,7 +65,16 @@ export function FinanceClient({
           <p className="text-sm text-muted">This month: <b className="tabular-nums">{fmt(total)}</b></p>
         </div>
         {isOwner && (
-          <button onClick={() => setOpen(true)} className="btn-primary">
+          <button
+            onClick={() => {
+              setCategoryId("");
+              setAddingCategory(false);
+              setNewCategoryName("");
+              setCatError(undefined);
+              setOpen(true);
+            }}
+            className="btn-primary"
+          >
             <Plus size={16} /> Add {kind === "income" ? "Income" : "Expense"}
           </button>
         )}
@@ -129,12 +155,49 @@ export function FinanceClient({
           </div>
           <div>
             <label className="label">Category *</label>
-            <select name="category_id" required className="input" defaultValue="">
-              <option value="" disabled>Select…</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            {!addingCategory ? (
+              <div className="flex gap-2">
+                <select
+                  name="category_id"
+                  required
+                  className="input"
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                >
+                  <option value="" disabled>Select…</option>
+                  {cats.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => { setAddingCategory(true); setCatError(undefined); }}
+                  className="btn-ghost whitespace-nowrap"
+                >
+                  + New
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {catError && <p className="text-xs font-semibold text-red-700">{catError}</p>}
+                <div className="flex gap-2">
+                  <input
+                    autoFocus
+                    className="input"
+                    placeholder="New category name"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); saveNewCategory(); }
+                    }}
+                  />
+                  <button type="button" onClick={saveNewCategory} className="btn-primary whitespace-nowrap">Add</button>
+                  <button type="button" onClick={() => { setAddingCategory(false); setCatError(undefined); }} className="btn-ghost">Cancel</button>
+                </div>
+              </div>
+            )}
+            {/* Hidden input keeps category_id in the form when the picker above is a plain <select> with no name during "adding" mode */}
+            {addingCategory && <input type="hidden" name="category_id" value={categoryId} />}
           </div>
           {kind === "expense" && (
             <div>
