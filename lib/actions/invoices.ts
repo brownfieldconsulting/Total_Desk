@@ -120,3 +120,29 @@ export async function deletePayment(id: string, invoiceId: string) {
   await supabase.from("payments").delete().eq("id", id);
   revalidatePath(`/invoices/${invoiceId}`);
 }
+
+export async function cancelInvoice(id: string, reason: string): Promise<{ ok: boolean; error?: string }> {
+  const profile = await requireRole("owner");
+  const trimmed = reason.trim();
+  if (!trimmed) return { ok: false, error: "A cancellation comment is required" };
+  const supabase = await createClient();
+  const { data: invoice } = await supabase.from("invoices").select("status, amount_paid").eq("id", id).single();
+  if (!invoice) return { ok: false, error: "Invoice not found" };
+  if (invoice.status === "cancelled") return { ok: false, error: "Already cancelled" };
+  if (Number(invoice.amount_paid) > 0) {
+    return { ok: false, error: "Cannot cancel an invoice with payments recorded — delete the payments first" };
+  }
+  const { error } = await supabase
+    .from("invoices")
+    .update({
+      status: "cancelled",
+      cancellation_reason: trimmed,
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: profile.id,
+    })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/invoices/${id}`);
+  revalidatePath("/invoices");
+  return { ok: true };
+}
